@@ -1,0 +1,95 @@
+<div align="center">
+
+<img src=".github/social-preview.png" alt="imgtool banner" width="100%" />
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-3ddc84.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows-0d1117?labelColor=0d1117)
+![Python](https://img.shields.io/badge/python-3.8%2B-f2a541)
+
+**A dependency-free Windows toolkit for Android `.img` and `super.img` files.**
+
+</div>
+
+---
+
+`imgtool` unpacks, repacks, splits and merges the image files used in
+Android ROM/firmware work — pure Python, no external packages required.
+
+| Command | What it does |
+|---|---|
+| `img-unpack` | Sparse image → raw (flat) image |
+| `img-repack` | Raw image → sparse image |
+| `super-list` | List the logical partitions inside a `super.img` |
+| `super-unpack` | Extract every partition (`system`, `vendor`, `product`, ...) from a `super.img` |
+| `super-repack` | Write replacement partition images back into a copy of `super.img` |
+| `super-split` | Split a large image into fixed-size numbered parts |
+| `super-merge` | Merge split parts back into a single file, byte-for-byte |
+
+## Requirements
+
+- Windows 10/11
+- [Python 3.8+](https://www.python.org/downloads/), with **"Add python.exe
+  to PATH"** checked during setup — no `pip install` needed, everything here
+  is pure standard library.
+
+## Getting started
+
+1. Download and unzip this repo anywhere, e.g. `C:\imgtool`.
+2. Double-click **`imgtool.bat`** for an interactive menu, or use the CLI
+   directly:
+
+```sh
+python -m imgtool img-unpack   sparse.img raw.img
+python -m imgtool img-repack   raw.img sparse.img [block_size=4096]
+python -m imgtool super-list   super.img
+python -m imgtool super-unpack super.img out_folder
+python -m imgtool super-repack super.img partition_folder new_super.img
+python -m imgtool super-split  super.img out_folder [chunk_size_mb=1024]
+python -m imgtool super-merge  super.img.000 merged_super.img
+```
+
+Run these from inside the unzipped folder (the one containing the
+`imgtool/` package and `imgtool.bat`).
+
+## How each command works
+
+**`img-unpack` / `img-repack`** implement the standard Android **sparse
+image** format (the same one `img2simg` / `simg2img` use). Unpacking
+expands a sparse image to its full raw size; repacking turns runs of
+zero blocks back into holes so the result stays compact.
+
+**`super-unpack`** parses the `super.img` partition table — the "liblp"
+metadata Android uses for dynamic partitions — and writes each logical
+partition out as its own `<name>.img`, plus a `partitions.txt` summary.
+A sparse `super.img` is converted to raw automatically first.
+
+**`super-repack`** copies your original `super.img`, then, for every file
+in your partition folder whose name matches a partition in the table
+(e.g. `system.img`), writes its bytes into that partition's exact
+original location(s) inside the copy. Only partition *data* is touched —
+never the partition table — so a replacement file must be the same size
+or smaller than the space already reserved for it; anything larger is
+skipped and reported rather than silently corrupting the image.
+
+> `super-repack` expects a **raw** (non-sparse) `super.img`. If yours is
+> sparse, run `img-unpack` on it first.
+
+**`super-split` / `super-merge`** do plain byte-range splitting — `split`
+cuts a file into `name.000`, `name.001`, ... parts of a chosen size
+(default 1024MB); `merge` concatenates them back exactly. Point `merge`
+at any one part (or the folder) and it finds and orders the rest.
+
+## Limitations
+
+This is a from-scratch, offline re-implementation of Android's sparse
+image and liblp formats, built for the common case of a single
+block-device `super.img` (the normal layout on phones). It's aimed at
+hobbyist ROM/firmware tinkering, not a drop-in replacement for AOSP's
+`lpunpack`/`lpmake`. Always keep a backup of your original images, and
+sanity-check partition sizes after unpacking/repacking (e.g. that an
+ext4 partition still starts with the `0xEF53` magic) before trusting the
+result on a real device.
+
+## License
+
+[MIT](LICENSE) © 2026 [xauusd25](https://github.com/xauusd25)
