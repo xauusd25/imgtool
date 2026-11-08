@@ -108,14 +108,21 @@ def resparse(src, dst, blk_sz=4096):
     total_blks = size // blk_sz
     zero_block = b"\x00" * blk_sz
 
-    # Pass 1: build a run-length list of (type, start_blk, num_blks)
+    # A chunk's on-disk size (header + data, for RAW chunks) is stored in a
+    # 32-bit field, so no single chunk may cover more than ~4GB of data.
+    # Cap well below that (256MB) so chunks also stay a sane size to work with.
+    MAX_CHUNK_BYTES = 256 * 1024 * 1024
+    max_chunk_blocks = max(1, MAX_CHUNK_BYTES // blk_sz)
+
+    # Pass 1: build a run-length list of (type, start_blk, num_blks),
+    # splitting any run longer than max_chunk_blocks into multiple chunks.
     chunks = []
     cur_type, cur_start, cur_len = None, 0, 0
     with open(src, "rb") as f_in:
         for i in range(total_blks):
             block = f_in.read(blk_sz)
             t = CHUNK_TYPE_DONT_CARE if block == zero_block else CHUNK_TYPE_RAW
-            if t == cur_type:
+            if t == cur_type and cur_len < max_chunk_blocks:
                 cur_len += 1
             else:
                 if cur_type is not None:

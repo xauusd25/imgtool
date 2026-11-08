@@ -9,12 +9,27 @@ Usage:
   python -m imgtool super-list   <super.img>
   python -m imgtool super-split  <super.img> <out_dir> [chunk_size_mb=1024]
   python -m imgtool super-merge  <first_part_or_dir> <out_super.img>
+  python -m imgtool payload-list    <payload.bin>
+  python -m imgtool payload-extract <payload.bin> <out_dir> [partition,...]
+  python -m imgtool payload-create  <partition_dir> <out_payload.bin>
 """
 
 import os
 import sys
 
-from . import sparse, liblp, splitmerge
+from . import sparse, liblp, splitmerge, payload
+
+
+def _resolve_out_file(dst, src, suffix):
+    """If dst is (or looks like) a directory, append a filename derived from src."""
+    if os.path.isdir(dst) or dst.endswith(("/", "\\")):
+        base = os.path.splitext(os.path.basename(src))[0]
+        os.makedirs(dst, exist_ok=True)
+        return os.path.join(dst, f"{base}{suffix}")
+    parent = os.path.dirname(dst)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    return dst
 
 
 def _fmt_bytes(n):
@@ -34,6 +49,7 @@ def cmd_img_unpack(args):
         print(f"'{src}' is not a sparse image (no sparse magic found).")
         print("It may already be a raw/flat image — nothing to unpack.")
         return 1
+    dst = _resolve_out_file(dst, src, ".raw.img")
     sparse.unsparse(src, dst)
     print(f"Unpacked sparse image -> raw image: {dst}")
     print(f"  Size: {_fmt_bytes(os.path.getsize(dst))}")
@@ -49,6 +65,7 @@ def cmd_img_repack(args):
     if sparse.is_sparse(src):
         print(f"'{src}' is already a sparse image — nothing to repack.")
         return 1
+    dst = _resolve_out_file(dst, src, ".sparse.img")
     n_chunks = sparse.resparse(src, dst, blk_sz)
     print(f"Repacked raw image -> sparse image: {dst}")
     print(f"  Chunks: {n_chunks}, block size: {blk_sz}")
@@ -98,6 +115,7 @@ def cmd_super_repack(args):
         print("Error: input super.img is sparse. Run img-unpack on it first,")
         print("       repack with super-repack, then img-repack the result if needed.")
         return 1
+    out_path = _resolve_out_file(out_path, super_path, ".repacked.img")
     report = liblp.repack_super(super_path, partition_dir, out_path)
     if not report:
         print("No matching <partition>.img files were found in the partition directory.")
@@ -132,11 +150,77 @@ def cmd_super_merge(args):
         print(f"No numbered part files found matching '{first_part}'")
         print("(expected files like myimage.super.000, .001, ...)")
         return 1
+    if os.path.isdir(out_path) or out_path.endswith(("/", "\\")):
+        merged_name = splitmerge._sort_key(parts[0])[0] or "merged.img"
+        os.makedirs(out_path, exist_ok=True)
+        out_path = os.path.join(out_path, merged_name)
+    else:
+        parent = os.path.dirname(out_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
     print("Merging parts in this order:")
     for p in parts:
         print(f"  {os.path.basename(p)}")
     splitmerge.merge_files(parts, out_path)
     print(f"Merged -> '{out_path}' ({_fmt_bytes(os.path.getsize(out_path))})")
+    return 0
+
+
+def cmd_payload_list(args):
+    if len(args) != 1:
+        print("Usage: payload-list <payload.bin>")
+        return 1
+    (payload_path,) = args
+    for name, size, n_ops, supported in payload.list_payload(payload_path):
+        size_str = _fmt_bytes(size) if size is not None else "?"
+        flag = "" if supported else "  [delta/unsupported ops]"
+        print(f"  {name:<24} {size_str:>10}   ({n_ops} op(s)){flag}")
+    return 0
+
+
+def cmd_payload_extract(args):
+    if len(args) not in (2, 3):
+        print("Usage: payload-extract <payload.bin> <out_dir> [partition1,partition2,...]")
+        return 1
+    payload_path, out_dir = args[0], args[1]
+    only = set(args[2].split(",")) if len(args) == 3 else None
+    extracted, skipped = payload.extract_payload(payload_path, out_dir, only)
+    if extracted:
+        print(f"Extracted {len(extracted)} partition(s) to '{out_dir}':")
+        for name, size in extracted:
+            print(f"  {name:<24} {_fmt_bytes(size)}")
+    if skipped:
+        print("Skipped:")
+        for name, reason in skipped:
+            print(f"  {name:<24} {reason}")
+    if not extracted and not skipped:
+        print("No matching partitions found.")
+        return 1
+    return 0
+
+
+def cmd_payload_create(args):
+    if len(args) != 2:
+        print("Usage: payload-create <partition_dir> <out_payload.bin>")
+        return 1
+    partition_dir, out_path = args
+    if not os.path.isdir(partition_dir):
+        print(f"'{partition_dir}' is not a folder")
+        return 1
+    partition_files = {}
+    for fname in sorted(os.listdir(partition_dir)):
+        if fname.lower().endswith(".img"):
+            name = fname[:-4]
+            partition_files[name] = os.path.join(partition_dir, fname)
+    if not partition_files:
+        print(f"No .img files found in '{partition_dir}'")
+        return 1
+    print(f"Compressing and packing {len(partition_files)} partition(s)...")
+    info = payload.create_payload(partition_files, out_path)
+    print(f"Wrote '{out_path}' ({_fmt_bytes(info['payload_size'])})")
+    print(f"  Partitions: {', '.join(info['partitions'])}")
+    print("  Note: this payload is UNSIGNED (minor_version 0, full payload).")
+    print("  It is not a substitute for a vendor-signed OTA.")
     return 0
 
 
@@ -148,6 +232,9 @@ COMMANDS = {
     "super-list": cmd_super_list,
     "super-split": cmd_super_split,
     "super-merge": cmd_super_merge,
+    "payload-list": cmd_payload_list,
+    "payload-extract": cmd_payload_extract,
+    "payload-create": cmd_payload_create,
 }
 
 
