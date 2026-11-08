@@ -8,6 +8,8 @@
 
 **A dependency-free, cross-platform toolkit for Android `.img` and `super.img` files.**
 
+by @XAU_USD_25
+
 </div>
 
 ---
