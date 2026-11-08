@@ -3,10 +3,10 @@
 <img src=".github/social-preview.png" alt="imgtool banner" width="100%" />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3ddc84.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-Windows-0d1117?labelColor=0d1117)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0d1117?labelColor=0d1117)
 ![Python](https://img.shields.io/badge/python-3.8%2B-f2a541)
 
-**A dependency-free Windows toolkit for Android `.img` and `super.img` files.**
+**A dependency-free, cross-platform toolkit for Android `.img` and `super.img` files.**
 
 </div>
 
@@ -24,19 +24,33 @@ Android ROM/firmware work — pure Python, no external packages required.
 | `super-repack` | Write replacement partition images back into a copy of `super.img` |
 | `super-split` | Split a large image into fixed-size numbered parts |
 | `super-merge` | Merge split parts back into a single file, byte-for-byte |
+| `payload-list` | List the partitions inside an OTA `payload.bin` |
+| `payload-extract` | Extract partitions from a `payload.bin` |
+| `payload-create` | Build a `payload.bin` from a folder of partition images |
 
 ## Requirements
 
-- Windows 10/11
-- [Python 3.8+](https://www.python.org/downloads/), with **"Add python.exe
-  to PATH"** checked during setup — no `pip install` needed, everything here
-  is pure standard library.
+- **Windows 10/11**, **Linux**, or **macOS**
+- [Python 3.8+](https://www.python.org/downloads/) — on Windows, check
+  **"Add python.exe to PATH"** during setup; on Linux it's usually
+  preinstalled or a package away (`sudo apt install python3`, etc.). No
+  `pip install` needed anywhere — everything here is pure standard library.
 
 ## Getting started
 
-1. Download and unzip this repo anywhere, e.g. `C:\imgtool`.
-2. Double-click **`imgtool.bat`** for an interactive menu, or use the CLI
-   directly:
+Download and extract this repo anywhere, then:
+
+**Windows** — double-click **`imgtool.bat`** for an interactive menu.
+
+**Linux / macOS** — run the menu script:
+
+```sh
+chmod +x imgtool.sh   # first time only
+./imgtool.sh
+```
+
+Or skip the menu and use the CLI directly on any platform (`python` on
+Windows, `python3` on Linux/macOS):
 
 ```sh
 python -m imgtool img-unpack   sparse.img raw.img
@@ -46,10 +60,13 @@ python -m imgtool super-unpack super.img out_folder
 python -m imgtool super-repack super.img partition_folder new_super.img
 python -m imgtool super-split  super.img out_folder [chunk_size_mb=1024]
 python -m imgtool super-merge  super.img.000 merged_super.img
+python -m imgtool payload-list    payload.bin
+python -m imgtool payload-extract payload.bin out_folder [system,vendor,...]
+python -m imgtool payload-create  partition_folder new_payload.bin
 ```
 
-Run these from inside the unzipped folder (the one containing the
-`imgtool/` package and `imgtool.bat`).
+Run these from inside the extracted folder (the one containing the
+`imgtool/` package, `imgtool.bat` and `imgtool.sh`).
 
 ## How each command works
 
@@ -78,6 +95,25 @@ skipped and reported rather than silently corrupting the image.
 cuts a file into `name.000`, `name.001`, ... parts of a chosen size
 (default 1024MB); `merge` concatenates them back exactly. Point `merge`
 at any one part (or the folder) and it finds and orders the rest.
+
+**`payload-list` / `payload-extract`** read `payload.bin`, the file
+inside Android OTA packages that carries every partition (built on
+Google's update_engine format). `list` shows each partition's declared
+size and whether its operations are extractable; `extract` decompresses
+and writes out each `<name>.img`, optionally limited to a comma-separated
+list of partition names. This only handles **full** OTA payloads
+(`REPLACE` / `REPLACE_BZ` / `REPLACE_XZ` / `ZERO` operations), which is
+what the vast majority of full OTA zips use. **Delta/incremental**
+payloads (`SOURCE_COPY`, `*_BSDIFF`, `PUFFDIFF`, ...) need the matching
+previous-build partition to apply against and are reported as skipped
+rather than guessed at.
+
+**`payload-create`** packs every `<name>.img` in a folder into an
+unsigned, "full" `payload.bin` (each partition as one `REPLACE_XZ`
+operation). This is for tools that read `payload.bin` directly (e.g.
+`fastboot update`, third-party flashers, payload dumpers) — it is **not**
+signed the way a vendor's genuine OTA is, so a stock recovery's OTA
+installer will not accept it.
 
 ## Limitations
 
