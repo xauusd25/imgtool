@@ -1,5 +1,6 @@
 """
 imgtool — Android .img / super.img toolkit
+by @XAU_USD_25
 
 Usage:
   python -m imgtool img-unpack   <sparse.img> <out_raw.img>
