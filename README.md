@@ -26,9 +26,6 @@ Android ROM/firmware work — pure Python, no external packages required.
 | `super-repack` | Write replacement partition images back into a copy of `super.img` |
 | `super-split` | Split a large image into fixed-size numbered parts |
 | `super-merge` | Merge split parts back into a single file, byte-for-byte |
-| `payload-list` | List the partitions inside an OTA `payload.bin` |
-| `payload-extract` | Extract partitions from a `payload.bin` |
-| `payload-create` | Build a `payload.bin` from a folder of partition images |
 
 ## Requirements
 
@@ -62,9 +59,6 @@ python -m imgtool super-unpack super.img out_folder
 python -m imgtool super-repack super.img partition_folder new_super.img
 python -m imgtool super-split  super.img out_folder [chunk_size_mb=1024]
 python -m imgtool super-merge  super.img.000 merged_super.img
-python -m imgtool payload-list    payload.bin
-python -m imgtool payload-extract payload.bin out_folder [system,vendor,...]
-python -m imgtool payload-create  partition_folder new_payload.bin
 ```
 
 Run these from inside the extracted folder (the one containing the
@@ -97,25 +91,6 @@ skipped and reported rather than silently corrupting the image.
 cuts a file into `name.000`, `name.001`, ... parts of a chosen size
 (default 1024MB); `merge` concatenates them back exactly. Point `merge`
 at any one part (or the folder) and it finds and orders the rest.
-
-**`payload-list` / `payload-extract`** read `payload.bin`, the file
-inside Android OTA packages that carries every partition (built on
-Google's update_engine format). `list` shows each partition's declared
-size and whether its operations are extractable; `extract` decompresses
-and writes out each `<name>.img`, optionally limited to a comma-separated
-list of partition names. This only handles **full** OTA payloads
-(`REPLACE` / `REPLACE_BZ` / `REPLACE_XZ` / `ZERO` operations), which is
-what the vast majority of full OTA zips use. **Delta/incremental**
-payloads (`SOURCE_COPY`, `*_BSDIFF`, `PUFFDIFF`, ...) need the matching
-previous-build partition to apply against and are reported as skipped
-rather than guessed at.
-
-**`payload-create`** packs every `<name>.img` in a folder into an
-unsigned, "full" `payload.bin` (each partition as one `REPLACE_XZ`
-operation). This is for tools that read `payload.bin` directly (e.g.
-`fastboot update`, third-party flashers, payload dumpers) — it is **not**
-signed the way a vendor's genuine OTA is, so a stock recovery's OTA
-installer will not accept it.
 
 ## Limitations
 
